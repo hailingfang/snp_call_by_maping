@@ -47,8 +47,27 @@ def target_dt_info(target_reads, target_assembly):
     return data_out
 
 
+def outgroup_dt_info(outgroup_assembly_dir, outgroup_reads_dir):
+    data_out = {}
+    if outgroup_assembly_dir:
+        data_out['assembly_outgroup'] = []
+        outgroup_assembly_dir = os.path.abspath(outgroup_assembly_dir)
+        for item in os.listdir(outgroup_assembly_dir):
+            data_out['assembly_outgroup'].append(os.path.join(outgroup_assembly_dir, item))
+    elif outgroup_reads_dir:
+        data_out['reads_outgroup'] = {}
+        outgroup_reads_dir = os.path.abspath(outgroup_reads_dir)
+        for item in os.listdir(outgroup_reads_dir):
+            data_out['reads_outgroup'][item] = []
+            for ff in os.listdir(os.path.join(outgroup_reads_dir,item)):
+                data_out['reads_outgroup'][item].append(os.path.join(outgroup_reads_dir, item, ff))
+
+    return data_out
+
+
+
 def main():
-    ref_genome, target_reads_dir, target_assembly_dir, outgroup_reads_dir, outgroup_assembly_dir \
+    ref_genome, target_reads_dir, target_assembly_dir, outgroup_assembly_dir, outgroup_reads_dir \
         = get_args()
 
     return 0
