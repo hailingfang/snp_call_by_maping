@@ -10,7 +10,7 @@ def get_args():
         of refrence genome. all reads or genome of target will mapped to this genome')
     args.add_argument('-target_genome_reads', type=str, default=None, help='target reads \
         file. reads file of one item needed put into a directory and put all this item file \
-        into target_genome_reads directory.')
+        into target_genome_reads directory. Utill now, only pair end reads are implementation.')
     args.add_argument('-target_genome_assembly', type=str, default=None, help='put all target \
         genome into a single directory.')
     args.add_argument('-outgroup_genome_assembly', type=str, default=None, help='genome \
@@ -19,6 +19,8 @@ def get_args():
     args.add_argument('-outgroup_genome_reads', type=str, default=None, help='genome \
         reads of outgroup. multiple genome can be used. put reads file into a directory of \
         a single item and put all item into outgroup_genome_reads directory.')
+    args.add_argument('-clean_up', type=str, default='No', choice=['No', 'Yes'], help='clean up \
+        all tmperary file when runing this pipeline. "No" was set as default.')
     args = args.parse_args()
     ref_genome, target_reads_dir, target_assembly_dir, outgroup_assembly_dir, \
     outgroup_reads_dir = args.ref_genome, args.target_genome_reads, args.target_genome_assembly, \
@@ -65,10 +67,43 @@ def outgroup_dt_info(outgroup_assembly_dir, outgroup_reads_dir):
     return data_out
 
 
+def map_reads_BWA(ref_genome, read1, read2):
+    # Before perform mapping whit BWA, FM-index should been carry out.
+    def ref_genome_index(ref_genome):
+        cmdname = 'bwa'
+        methods = 'index'
+        opt_p = '-p '+os.path.basename(ref_genome)
+        opt_a = '-a is' # Note, IS algoritmn suit for genome not longer than 2Gbp.
+        para_genome = ref_genome
+        cmd = ' '.join([cmdname, methods, opt_p, opt_a, para_genome])
+        print(cmd)
+        # os.system(cmd)
+        ref_genome_indexed = ref_genome
+        return ref_genome_indexed
+
+    def run_method_mem(ref_genome_indexed, read1, read2):
+        cmdname = 'bwa'
+        methods = 'mem'
+        opt_t = '-t 8'
+        ref_genome_prefix = ref_genome_indexed
+        para_read1 = read1
+        para_read2 = read2
+        para_out = '>'+os.path.join(os.path.dirname(read1),'bwa_mem_out.sam')
+        cmd = ' '.join([cmdname, methods, opt_t, ref_genome_prefix, para_read1, para_read2, para_out])
+        print(cmd)
+        #os.system(cmd)
+        return 0
+
+    return 0
+
+
 
 def main():
     ref_genome, target_reads_dir, target_assembly_dir, outgroup_assembly_dir, outgroup_reads_dir \
         = get_args()
+    target_infor = target_dt_info(target_reads_dir, target_assembly_dir)
+    outgroup_infor = outgroup_dt_info(outgroup_assembly_dir, outgroup_reads_dir)
+
 
     return 0
 
