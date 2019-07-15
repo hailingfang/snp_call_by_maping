@@ -2,6 +2,10 @@
 
 import argparse
 import os
+import time
+import shutil
+import sys
+import fbio.fparse
 
 def get_args():
     args = argparse.ArgumentParser(description='This utility is used to get SNPs \
@@ -79,7 +83,7 @@ def outgroup_dt_info(outgroup_assembly_dir, outgroup_reads_dir):
     return data_out
 
 
-def index_ref_genome_BWA(ref_genome):
+def index_ref_genome_BWA(ref_genome, out_prefix):
     '''
     using "bwa index" to index refrence genome for BWA mapping reads. command using like:
     `bwa index -a is -p ref_genome ref_genome`
@@ -87,7 +91,7 @@ def index_ref_genome_BWA(ref_genome):
     # Before perform mapping whit BWA, FM-index should been carry out.
     cmdname = 'bwa'
     methods = 'index'
-    opt_p = '-p ' + ref_genome
+    opt_p = '-p ' + out_prefix #prefix of results
     opt_a = '-a is' # Note, IS algoritmn suit for genome not longer than 2Gbp.
     para_genome = ref_genome
     cmd = ' '.join([cmdname, methods, opt_p, opt_a, para_genome])
@@ -98,7 +102,7 @@ def index_ref_genome_BWA(ref_genome):
     return ref_genome_indexed_bwa
 
 
-def map_reads_BWA(ref_genome_indexed_bwa, read1, read2, num_threads):
+def map_reads_BWA(ref_genome_indexed_bwa, read1, read2, num_threads, out_file):
     '''
     Map pair end reads into ref_genome using BWA. command using like:
     'bwa mem -t num_threads ref_genome read1.fq read2.fq'
@@ -106,9 +110,7 @@ def map_reads_BWA(ref_genome_indexed_bwa, read1, read2, num_threads):
     cmdname = 'bwa'
     methods = 'mem'
     opt_t = '-t ' + str(num_threads)
-    bwa_map_res_path = os.path.join(os.path.dirname(read1), \
-        os.path.basename(os.path.dirname(read1)) + '_bwa_mem_out.sam')
-    opt_o = '-o ' + bwa_map_res_path
+    opt_o = '-o ' + out_file
     para_ref_genome_prefix = ref_genome_indexed_bwa
     para_read1 = read1
     para_read2 = read2
@@ -117,7 +119,7 @@ def map_reads_BWA(ref_genome_indexed_bwa, read1, read2, num_threads):
     print(cmd)
     os.system(cmd)
     #bwa_map_res_path is bwa mem result file with path.
-    return bwa_map_res_path
+    return out_file
 
 
 def index_ref_genome_samtools(ref_genome):
@@ -136,7 +138,7 @@ def index_ref_genome_samtools(ref_genome):
     return ref_genome_indexed_samtools
 
 
-def sort_sam_samtools(sam_file, num_threads):
+def sort_sam_samtools(sam_file, num_threads, out_file):
     '''
     Using samtools to sort BWA reads mapping result, The command using like:
     `samtools sort -O BAM -@ num_threads -o in.bam_sorted in.bam`
@@ -145,53 +147,172 @@ def sort_sam_samtools(sam_file, num_threads):
     methods = 'sort'
     opt_O = '-O BAM'
     opt_threads = '-@ ' + str(num_threads)
-    bam_file_name = sam_file[:-4] + '_samtools_sorted.bam'
-    opt_o = '-o ' + bam_file_name
+    opt_o = '-o ' + out_file
     para_sam_file = sam_file
     cmd = ' '.join([cmdname, methods, opt_threads, opt_O, opt_o, para_sam_file])
     print(cmd)
     os.system(cmd)
     # sam file sorted result, it is a bam file with path.
-    return bam_file_name
+    return out_file
 
 
-def index_bam_samtools():
+def index_bam_samtools(sorted_bam_file, num_threads):
     '''
     Using "samtools index" to index bam file. Command using like:
     `samtools index in.bam`
     '''
-    pass
+    cmdname = 'samtools'
+    methods = 'index'
+    opt_threads = '-@ ' + str(num_threads)
+    para_bam_file = sorted_bam_file
+    cmd = ' '.join([cmdname, methods, opt_threads, para_bam_file])
+    print(cmd)
+    os.system(cmd)
+    indexed_bam_samtools = para_bam_file + '.bai'
+    return indexed_bam_samtools
 
 
+def mpileup_bam_bcftools(ref_genome, bam_file_sorted_name, num_threads, out_file):
+    '''
+    Using "bcftools mpileup" to calculate base coverage on refrence genome. command
+    using like:
+    `bcftools mpileup -f ref_genome -o mpileup.vcf in.bam`
+    '''
+    cmdname = 'bcftools'
+    methods = 'mpileup'
+    opt_f = '-f ' + ref_genome
+    opt_o = '-o ' + out_file
+    opt_threads = '--threads ' + num_threads
+    para_bam_file = bam_file_sorted_name
+    cmd = ' '.join([cmdname, methods, opt_threads, opt_f, opt_o, para_bam_file])
+    print(cmd)
+    os.system(cmd)
+    return out_file
 
-def call_snp_bcftools():
+
+def call_snp_bcftools(bcftools_mpileup_file, out_file):
     '''
     Using "bcftools call" to call SNPs. The command using like:
-    `bcftools mpilepy -f ref_genome in.bam`
-    `bcftools call -mv -f ref_genome --ploidy 1 in1.bam ...`
+    `bcftools call -mv --ploidy 1 in1.bam ...`
     '''
-    pass
+    cmdname = 'bcftools'
+    methods = 'call'
+    opt_mv = '-mv'
+    opt_ploidy = '--ploidy 1'
+    opt_o = '-o ' + out_file
+    para_bam_file = bcftools_mpileup_file
+    cmd = ' '.join([cmdname, methods, opt_mv, opt_ploidy, opt_o, para_bam_file])
+    print(cmd)
+    os.system(cmd)
+    return out_file
+
+
+def add_ref_genome_data(results_container, ref_genome):
+    return 0
+
+
+def parse_target_reads_snp_data(mpileup_file, snp_file):
+    def struc_mpileup_file(mpileup_file):
+        data_out = {}
+        a_line = [line.rstrip().split('\t') for line in open(mpileup_file) if line[0] != '#']
+        for line in a_line:
+            contig = line[0]
+            position = int(line[1])
+            ref_base = line[3]
+            dp = line[7].split(';')[0]
+            if dp == 'INDEL':
+                continue
+            dp = int(dp.split('=')[1])
+            if contig not in data_out:
+                data_out[contig] = {}
+            data_out[contig][position] = [position, ref_base, dp]
+        return data_out
+
+    def struc_snp_file(snp_file):
+        data_out = {}
+        a_line = [line.rstrip().split('\t') for line in open(snp_file) if line[0] != '#']
+        for line in a_line:
+            contig = line[0]
+            position = int(line[1])
+            alt_base = line[4]
+            qual = round(float(line[5]), 3)
+            dp = line[7].split(';')[0]
+            if dp == 'INDEL':
+                continue
+            if contig not in data_out:
+                data_out[contig] = {}
+            data_out[contig][position] = [position, alt_base, qual]
+        return data_out
+
+    def merge_mpileup_snp_dt(mpileup_dt, snp_dt):
+        data_out = {}
+        for contig in mpileup_dt:
+            data_out[contig] = {}
+            for position in mpileup_dt[contig]:
+                dt1 = mpileup_dt[contig][position]
+                if position in snp_dt[contig]:
+                    dt2 = snp_dt[contig][position]
+                    dt_new = dt1 + dt2[1:]
+                else:
+                    dt_new = dt1 + [None, None]
+                data_out[contig][position] = dt_new
+        return data_out
+
+    mpileup_dt = struc_mpileup_file(mpileup_file)
+    snp_dt = struc_snp_file(snp_file)
+    mpileup_snp_dt = merge_mpileup_snp_dt(mpileup_dt, snp_dt)
+    return mpileup_snp_dt
+
+
 
 
 def main():
     ref_genome, target_reads_dir, target_assembly_dir, outgroup_assembly_dir, outgroup_reads_dir, \
         num_threads, snp_qual_cutoff, snp_coverage_cutoff, snp_diversity_cutoff = get_args()
+
     target_infor = target_dt_info(target_reads_dir, target_assembly_dir)
     print(target_infor)
     outgroup_infor = outgroup_dt_info(outgroup_assembly_dir, outgroup_reads_dir)
     print(outgroup_infor)
+
+    res_dir = 'Result_' + time.strftime('%Y%m%d%H%M%S')
+    tmp_dir = os.path.join(res_dir, 'tmp')
+    ref_genome_dir = os.path.join(res_dir, 'ref_genome')
+    snp_targe_dir = os.path.join(res_dir, 'snp_target')
+    snp_outgroup_dir = os.path.join(res_dir, 'snp_outgroup')
+    snp_all_dir = os.path.join(res_dir, 'snp_all')
+    if not os.path.exists(res_dir):
+        os.mkdir(res_dir)
+        os.mkdir(tmp_dir)
+        os.mkdir(ref_genome_dir)
+        os.mkdir(snp_targe_dir)
+        os.mkdir(snp_outgroup_dir)
+        os.mkdir(snp_all_dir)
+    shutil.copy(ref_genome, ref_genome_dir)
+    ref_genome = os.path.join(ref_genome_dir, os.path.basename(ref_genome))
+    print(ref_genome)
     results_container = {'target_snp':{}, 'outgroup_snp':{}, 'ref_genome':{}}
+    add_ref_genome_data(results_container, ref_genome)
 
     if list(target_infor.keys())[0] == 'reads_target':
-        #ref_genome_indexed_bwa = index_ref_genome_BWA(ref_genome)
-        #ref_genome_indexed_samtools = index_ref_genome_samtools(ref_genome)
+        out_prefix = ref_genome
+        ref_genome_indexed_bwa = index_ref_genome_BWA(ref_genome, out_prefix)
+        ref_genome_indexed_samtools = index_ref_genome_samtools(ref_genome)
         for strain in target_infor['reads_target']:
             read1, read2 = target_infor['reads_target'][strain]
-            #bwa_map_res_path = map_reads_BWA(ref_genome_indexed_bwa, read1, read2, num_threads)
-            #bam_file_sorted_name = sort_sam_samtools('/home/fanghl/git_work_space/snp_call_by_maping/testdata/target_genome_reads/CL100075791_L02_565/CL100075791_L02_565_bwa_mem_out.sam' , num_threads)
+            out_file = os.path.join(tmp_dir, 'bwa_mem.tmp.sam')
+            bwa_map_res_path = map_reads_BWA(ref_genome_indexed_bwa, read1, read2, num_threads, out_file)
+            out_file = os.path.join(tmp_dir, 'samtools_sorted.bam')
+            bam_file_sorted = sort_sam_samtools(bwa_map_res_path , num_threads, out_file)
+            indexed_bam_samtools = index_bam_samtools(bam_file_sorted, num_threads)
+            out_file = os.path.join(tmp_dir, 'mpileup_bcftools.vcf')
+            mpileup_file = mpileup_bam_bcftools(ref_genome, bam_file_sorted, out_file)
+            out_file = os.path.join(tmp_dir, 'bcf_call_snp.vcf')
+            snp_file = call_snp_bcftools(mpileup_file, out_file)
+            parse_target_reads_snp_data(results_container, mpileup_file, snp_file)
 
-    elif target_infor.keys()[0] == 'assembly_target':
-        print('utill now, only reads target data is supported.')
+#    elif target_infor.keys()[0] == 'assembly_target':
+#        print('utill now, only reads target data is supported.')
 
     return 0
 
