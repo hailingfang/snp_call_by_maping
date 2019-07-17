@@ -1,11 +1,13 @@
 #! /usr/bin/env python3
 
+
 import argparse
 import os
 import time
 import shutil
 import fbio.fparse
 import pickle
+
 
 def get_args():
     args = argparse.ArgumentParser(description='This utility is used to get SNPs \
@@ -279,26 +281,21 @@ def merge_target_and_outgroup_dt():
 
 def transform_snp_dt(snp_dt_raw):
     dt_transformed = {}
-    check_dt = {}
     for strain in snp_dt_raw:
         for contig in snp_dt_raw[strain]:
             if contig not in dt_transformed: dt_transformed[contig] = {}
-            if contig not in check_dt: check_dt[contig] = []
-            check_dt[contig].append(len(snp_dt_raw[strain][contig]))
             for position in snp_dt_raw[strain][contig]:
                 if position not in dt_transformed[contig]: dt_transformed[contig][position] = {}
                 dt_transformed[contig][position][strain] = snp_dt_raw[strain][contig][position]
-
-    for contig in check_dt:
-        if min(check_dt[contig]) != max(check_dt[contig]):
-            raise Exception('opps')
     # dt_transformed: {contig:{position:{strain:[pos, ref, dp, alt, qual]}}}
     return dt_transformed
 
 
-def filter_snp_dt(snp_dt_transed, dp_cutoff, qual_cutoff, diversity_cutoff):
+def filter_snp_dt(snp_dt_transed, dp_cutoff, qual_cutoff, diversity_cutoff, strain_amount):
 
-    def filter(column, dp_cutoff, qual_cutoff, diversity_cutoff):
+    def filter(column, dp_cutoff, qual_cutoff, diversity_cutoff, strain_amount):
+        if len(column) < strain_amount:
+            return 0
         for ele in column:
             if ele[2] < dp_cutoff:
                 return 0
@@ -336,13 +333,13 @@ def filter_snp_dt(snp_dt_transed, dp_cutoff, qual_cutoff, diversity_cutoff):
             column = []
             for strain in snp_dt_transed[contig][position]:
                 column.append(snp_dt_transed[contig][position][strain])
-            judge_snp_bool = filter(column, dp_cutoff, qual_cutoff, diversity_cutoff)
+            judge_snp_bool = filter(column, dp_cutoff, qual_cutoff, diversity_cutoff, strain_amount)
             if judge_snp_bool:
                 ok_position[contig].append(position)
                 for strain in snp_dt_transed[contig][position]:
                     if strain not in snp_out[contig]:
                         snp_out[contig][strain] = {}
-                        snp_out[contig][strain][position] = snp_dt_transed[contig][position][strain]
+                    snp_out[contig][strain][position] = snp_dt_transed[contig][position][strain]
     return snp_out, ok_position
 
 
@@ -351,40 +348,41 @@ def print_res(snp_filtered, ok_position, ref_genome, out_dir):
     snp_seq = open(os.path.join(out_dir, 'snp_seq.fasta'), 'w')
     all_snp_seq = {'ref_pos':[], 'ref_base':[]}
     for contig in ok_position:
-        print('>', contig, file=snp_filtered)
         positions = ok_position[contig]
-        positions.sort()
-        tmp_ref_pos = []
-        tmp_ref_base = []
-        for pos in positions:
-            tmp_ref_pos.append(str(pos))
-            tmp_ref_base.append(ref_genome[contig][pos - 1])
-        all_snp_seq['ref_pos'] += tmp_ref_pos
-        all_snp_seq['ref_base'] += tmp_ref_base
-        print('ref_pos', ''.join(tmp_ref_pos), sep='\t', file=snp_res_detail)
-        print('ref_base', ''.join(tmp_ref_base), sep='\t', file=snp_res_detail)
-
-        for strain in snp_filtered[contig]:
-            tmp_base = []
+        if len(positions) > 0:
+            print('>', contig, file=snp_res_detail)
+            positions.sort()
+            tmp_ref_pos = []
+            tmp_ref_base = []
             for pos in positions:
-                if snp_filtered[contig][strain][pos][3]:
-                    tmp_base.append(snp_filtered[contig][strain][pos][3])
-                else:
-                    tmp_base.append(snp_filtered[contig][strain][pos][1])
-            print(strain, ''.join(tmp_base), sep='\t', file=snp_res_detail)
-            if strain not in all_snp_seq:
-                all_snp_seq[strain] = []
-            all_snp_seq[strain] += tmp_base
+                tmp_ref_pos.append(str(pos))
+                tmp_ref_base.append(ref_genome[contig][pos - 1])
+            all_snp_seq['ref_pos'] += tmp_ref_pos
+            all_snp_seq['ref_base'] += tmp_ref_base
+            print('ref_pos', ','.join(tmp_ref_pos), sep='\t', file=snp_res_detail)
+            print('ref_base', ''.join(tmp_ref_base), sep='\t', file=snp_res_detail)
+
+            for strain in snp_filtered[contig]:
+                tmp_base = []
+                for pos in positions:
+                    if snp_filtered[contig][strain][pos][3]:
+                        tmp_base.append(snp_filtered[contig][strain][pos][3])
+                    else:
+                        tmp_base.append(snp_filtered[contig][strain][pos][1])
+                print(strain, ''.join(tmp_base), sep='\t', file=snp_res_detail)
+                if strain not in all_snp_seq:
+                    all_snp_seq[strain] = []
+                all_snp_seq[strain] += tmp_base
 
     print('>', 'ref_pos', file=snp_seq)
-    print(''.join(all_snp_seq['ref_pos']), file=snp_seq)
+    print(','.join(all_snp_seq['ref_pos']), file=snp_seq)
     print('>', 'ref_base', file=snp_seq)
     print(''.join(all_snp_seq['ref_base']), file=snp_seq)
     all_snp_seq.pop('ref_pos')
     all_snp_seq.pop('ref_base')
     for strain in all_snp_seq:
         print('>', strain, file=snp_seq)
-        print(''.join(all_snp_seq[strain]), fi松露le=snp_seq)
+        print(''.join(all_snp_seq[strain]), file=snp_seq)
     return 0
 
 def main():
@@ -439,18 +437,20 @@ def main():
             os.mkdir(keeping_dir)
             shutil.move(mpileup_file, keeping_dir)
             shutil.move(snp_file, keeping_dir)
-        tmp_bk = open('tmp.pickle', 'wb')
+        tmp_bk = open(os.path.join(tmp_dir, 'tmp.pickle'), 'wb')
         pickle.dump(results_container['target_snp'], tmp_bk)
     elif list(target_infor.keys())[0] == 'assembly_target':
-        print('utill now, only reads target data is supported.')
+        print('untill now, only reads target data is supported.')
 
 #    if list(outgroup_infor.keys())[0] == 'reads_outgroup':
 #        pass
 #    elif list(outgroup_infor.keys())[0] == 'assembly_outgroup':
 #        pass
     snp_dt_raw = results_container['target_snp']
+    strain_amount = len(snp_dt_raw)
     snp_dt_transed = transform_snp_dt(snp_dt_raw)
-    snp_filtered, ok_position = filter_snp_dt(snp_dt_transed, snp_coverage_cutoff, snp_qual_cutoff, snp_diversity_cutoff)
+    snp_filtered, ok_position = filter_snp_dt(snp_dt_transed, snp_coverage_cutoff, \
+        snp_qual_cutoff, snp_diversity_cutoff, strain_amount)
     print_res(snp_filtered, ok_position, results_container['ref_genome'], snp_all_dir)
 
     return 0
