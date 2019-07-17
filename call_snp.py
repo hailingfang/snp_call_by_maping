@@ -439,6 +439,9 @@ def main():
             shutil.move(snp_file, keeping_dir)
         tmp_bk = open(os.path.join(tmp_dir, 'tmp.pickle'), 'wb')
         pickle.dump(results_container['target_snp'], tmp_bk)
+        os.remove(bwa_map_res_path)
+        os.remove(bam_file_sorted)
+        os.remove(indexed_bam_samtools)
     elif list(target_infor.keys())[0] == 'assembly_target':
         print('untill now, only reads target data is supported.')
 
