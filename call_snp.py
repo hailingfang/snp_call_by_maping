@@ -29,8 +29,8 @@ def get_args():
         used')
     args.add_argument('-snp_qual_cutoff', type=int, default=40, help='QUAL value cutoff of vcf result, default is 40.')
     args.add_argument('-snp_coverage_cutoff', type=int, default=20, help='coverage cutoff of snp site, default is 20.')
-    args.add_argument('-snp_diversity_cutoff', type=float, default=0.5, help='snp diversity cutoff. reduce \
-        single nucletide varition, default is 0.5.')
+    args.add_argument('-snp_diversity_cutoff', type=float, default=0.05, help='snp diversity cutoff. reduce \
+        single nucletide varition, default is 0.05.')
     args.add_argument('-clean_up', type=str, default='No', choices=['No', 'Yes'], help='clean up \
         all tmperary file when runing this pipeline. "No" was set as default.')
     args = args.parse_args()
