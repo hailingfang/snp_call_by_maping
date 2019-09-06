@@ -374,14 +374,14 @@ def print_res(snp_filtered, ok_position, ref_genome, out_dir):
                     all_snp_seq[strain] = []
                 all_snp_seq[strain] += tmp_base
 
-    print('>', 'ref_pos', file=snp_seq)
+    print('>' + 'ref_pos', file=snp_seq)
     print(','.join(all_snp_seq['ref_pos']), file=snp_seq)
-    print('>', 'ref_base', file=snp_seq)
+    print('>' + 'ref_base', file=snp_seq)
     print(''.join(all_snp_seq['ref_base']), file=snp_seq)
     all_snp_seq.pop('ref_pos')
     all_snp_seq.pop('ref_base')
     for strain in all_snp_seq:
-        print('>', strain, file=snp_seq)
+        print('>' + strain, file=snp_seq)
         print(''.join(all_snp_seq[strain]), file=snp_seq)
     return 0
 
