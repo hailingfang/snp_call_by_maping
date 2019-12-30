@@ -5,7 +5,7 @@ import argparse
 import os
 import time
 import shutil
-import fbio.fparse
+import biolib.bioparser
 import pickle
 
 
@@ -13,7 +13,8 @@ def get_args():
     args = argparse.ArgumentParser(description='This utility is used to get SNPs \
         consitance sequence.')
     args.add_argument('-ref_genome', type=str, required=True, help='the file name \
-        of refrence genome. all reads or genome of target will mapped to this genome')
+        of refrence genome. all reads or genome of target will mapped to this \
+        genome')
     args.add_argument('-target_reads_dir', type=str, default=None, help='target reads \
         file. reads file of one item needed put into a directory and put all this item file \
         into target_genome_reads directory. Utill now, only pair end reads are implementation.')
@@ -27,8 +28,10 @@ def get_args():
         a single item and put all item into outgroup_genome_reads directory.')
     args.add_argument('-num_threads', type=int, default=1, help='number of threads this pipeline \
         used')
-    args.add_argument('-snp_qual_cutoff', type=int, default=40, help='QUAL value cutoff of vcf result, default is 40.')
-    args.add_argument('-snp_coverage_cutoff', type=int, default=20, help='coverage cutoff of snp site, default is 20.')
+    args.add_argument('-snp_qual_cutoff', type=int, default=40, help='QUAL value\
+        cutoff of vcf result, default is 40.')
+    args.add_argument('-snp_coverage_cutoff', type=int, default=20, help='coverage\
+        cutoff of snp site, default is 20.')
     args.add_argument('-snp_diversity_cutoff', type=float, default=0.05, help='snp diversity cutoff. reduce \
         single nucletide varition, default is 0.05.')
     args.add_argument('-clean_up', type=str, default='No', choices=['No', 'Yes'], help='clean up \
@@ -54,10 +57,10 @@ def target_dt_info(target_reads, target_assembly):
         target_reads = os.path.abspath(target_reads)
         data_out['reads_target'] = {}
         for item in os.listdir(target_reads):
-            data_out['reads_target'][item]=[]
-            for ff in os.listdir(os.path.join(target_reads,item)):
+            data_out['reads_target'][item] = []
+            for ff in os.listdir(os.path.join(target_reads, item)):
                 if ff.split('.')[-1] == 'fastq' or ff.split('.')[-1] == 'fq':
-                    data_out['reads_target'][item].append(os.path.join(target_reads,item,ff))
+                    data_out['reads_target'][item].append(os.path.join(target_reads, item, ff))
     elif target_assembly:
         target_assembly = os.path.abspath(target_assembly)
         data_out['assembly_target'] = []
@@ -79,7 +82,7 @@ def outgroup_dt_info(outgroup_assembly_dir, outgroup_reads_dir):
         outgroup_reads_dir = os.path.abspath(outgroup_reads_dir)
         for item in os.listdir(outgroup_reads_dir):
             data_out['reads_outgroup'][item] = []
-            for ff in os.listdir(os.path.join(outgroup_reads_dir,item)):
+            for ff in os.listdir(os.path.join(outgroup_reads_dir, item)):
                 data_out['reads_outgroup'][item].append(os.path.join(outgroup_reads_dir, item, ff))
 
     return data_out
@@ -93,14 +96,14 @@ def index_ref_genome_BWA(ref_genome, out_prefix):
     # Before perform mapping whit BWA, FM-index should been carry out.
     cmdname = 'bwa'
     methods = 'index'
-    opt_p = '-p ' + out_prefix #prefix of results
-    opt_a = '-a is' # Note, IS algoritmn suit for genome not longer than 2Gbp.
+    opt_p = '-p ' + out_prefix      # prefix of results
+    opt_a = '-a is'     # Note, IS algoritmn suit for genome not longer than 2Gbp.
     para_genome = ref_genome
     cmd = ' '.join([cmdname, methods, opt_p, opt_a, para_genome])
     print(cmd)
     os.system(cmd)
     ref_genome_indexed_bwa = ref_genome
-    #ref_genome_indexed is a refrence genome indexed prefix with path.
+    # ref_genome_indexed is a refrence genome indexed prefix with path.
     return ref_genome_indexed_bwa
 
 
@@ -116,11 +119,10 @@ def map_reads_BWA(ref_genome_indexed_bwa, read1, read2, num_threads, out_file):
     para_ref_genome_prefix = ref_genome_indexed_bwa
     para_read1 = read1
     para_read2 = read2
-    cmd = ' '.join([cmdname, methods, opt_t, opt_o, para_ref_genome_prefix, \
-        para_read1, para_read2])
+    cmd = ' '.join([cmdname, methods, opt_t, opt_o, para_ref_genome_prefix, para_read1, para_read2])
     print(cmd)
     os.system(cmd)
-    #bwa_map_res_path is bwa mem result file with path.
+    # bwa_map_res_path is bwa mem result file with path.
     return out_file
 
 
@@ -136,7 +138,7 @@ def index_ref_genome_samtools(ref_genome):
     print(cmd)
     os.system(cmd)
     ref_genome_indexed_samtools = ref_genome
-    #ref_genome_indexed_samtools is prefix of refrence genome with path after indexed.
+    # ref_genome_indexed_samtools is prefix of refrence genome with path after indexed.
     return ref_genome_indexed_samtools
 
 
@@ -195,7 +197,7 @@ def mpileup_bam_bcftools(ref_genome, bam_file_sorted_name, num_threads, out_file
 def call_snp_bcftools(bcftools_mpileup_file, num_threads, out_file):
     '''
     Using "bcftools call" to call SNPs. The command using like:
-    `bcftools call -mv --ploidy 1 in1.bam ...`
+    `bcftools call -mv --ploidy 1 in.bam ...`
     '''
     cmdname = 'bcftools'
     methods = 'call'
@@ -212,7 +214,7 @@ def call_snp_bcftools(bcftools_mpileup_file, num_threads, out_file):
 
 def parse_ref_genome_data(ref_genome):
     dt_out = {}
-    dt = fbio.fparse.Fasta_parse(ref_genome)
+    dt = biolib.bioparser.Fasta_parse(ref_genome)
     dt.join_lines()
     dt = dt.data
     for head in dt:
@@ -283,9 +285,11 @@ def transform_snp_dt(snp_dt_raw):
     dt_transformed = {}
     for strain in snp_dt_raw:
         for contig in snp_dt_raw[strain]:
-            if contig not in dt_transformed: dt_transformed[contig] = {}
+            if contig not in dt_transformed:
+                dt_transformed[contig] = {}
             for position in snp_dt_raw[strain][contig]:
-                if position not in dt_transformed[contig]: dt_transformed[contig][position] = {}
+                if position not in dt_transformed[contig]:
+                    dt_transformed[contig][position] = {}
                 dt_transformed[contig][position][strain] = snp_dt_raw[strain][contig][position]
     # dt_transformed: {contig:{position:{strain:[pos, ref, dp, alt, qual]}}}
     return dt_transformed
@@ -309,7 +313,8 @@ def filter_snp_dt(snp_dt_transed, dp_cutoff, qual_cutoff, diversity_cutoff, stra
                 seq_line.append(ele[1])
         counter = {}
         for base in seq_line:
-            if base not in counter: counter[base] = 0
+            if base not in counter:
+                counter[base] = 0
             counter[base] += 1
         if len(counter) > 4:
             print('Worning, More than four kinds of base found in one position...')
@@ -319,7 +324,7 @@ def filter_snp_dt(snp_dt_transed, dp_cutoff, qual_cutoff, diversity_cutoff, stra
         for base in counter:
             tmp.append(counter[base])
         tmp.sort()
-        if sum(tmp[:-1])/sum(tmp) < diversity_cutoff:
+        if sum(tmp[:-1]) / sum(tmp) < diversity_cutoff:
             return 0
         else:
             return 1
@@ -327,8 +332,10 @@ def filter_snp_dt(snp_dt_transed, dp_cutoff, qual_cutoff, diversity_cutoff, stra
     ok_position = {}
     snp_out = {}
     for contig in snp_dt_transed:
-        if contig not in snp_out: snp_out[contig] = {}
-        if contig not in ok_position: ok_position[contig] = []
+        if contig not in snp_out:
+            snp_out[contig] = {}
+        if contig not in ok_position:
+            ok_position[contig] = []
         for position in snp_dt_transed[contig]:
             column = []
             for strain in snp_dt_transed[contig][position]:
@@ -346,7 +353,7 @@ def filter_snp_dt(snp_dt_transed, dp_cutoff, qual_cutoff, diversity_cutoff, stra
 def print_res(snp_filtered, ok_position, ref_genome, out_dir):
     snp_res_detail = open(os.path.join(out_dir, 'snp_detail'), 'w')
     snp_seq = open(os.path.join(out_dir, 'snp_seq.fasta'), 'w')
-    all_snp_seq = {'ref_pos':[], 'ref_base':[]}
+    all_snp_seq = {'ref_pos': [], 'ref_base': []}
     for contig in ok_position:
         positions = ok_position[contig]
         if len(positions) > 0:
@@ -385,6 +392,7 @@ def print_res(snp_filtered, ok_position, ref_genome, out_dir):
         print(''.join(all_snp_seq[strain]), file=snp_seq)
     return 0
 
+
 def main():
     ref_genome, target_reads_dir, target_assembly_dir, outgroup_assembly_dir, outgroup_reads_dir, \
         num_threads, snp_qual_cutoff, snp_coverage_cutoff, snp_diversity_cutoff = get_args()
@@ -410,20 +418,21 @@ def main():
     shutil.copy(ref_genome, ref_genome_dir)
     ref_genome = os.path.join(ref_genome_dir, os.path.basename(ref_genome))
     print(ref_genome)
-    results_container = {'target_snp':{}, 'outgroup_snp':{}, 'ref_genome':{}}
+    results_container = {'target_snp': {}, 'outgroup_snp': {}, 'ref_genome': {}}
     ref_genome_dt = parse_ref_genome_data(ref_genome)
     results_container['ref_genome'] = ref_genome_dt
 
     if list(target_infor.keys())[0] == 'reads_target':
         out_prefix = ref_genome
         ref_genome_indexed_bwa = index_ref_genome_BWA(ref_genome, out_prefix)
-        ref_genome_indexed_samtools = index_ref_genome_samtools(ref_genome)
+        index_ref_genome_samtools(ref_genome)
+        # the return of function 'index_ref_genome_samtools' is as same as ref_genome actually.
         for strain in target_infor['reads_target']:
             read1, read2 = target_infor['reads_target'][strain]
             out_file = os.path.join(tmp_dir, 'bwa_mem.tmp.sam')
             bwa_map_res_path = map_reads_BWA(ref_genome_indexed_bwa, read1, read2, num_threads, out_file)
             out_file = os.path.join(tmp_dir, 'samtools_sorted.bam')
-            bam_file_sorted = sort_sam_samtools(bwa_map_res_path , num_threads, out_file)
+            bam_file_sorted = sort_sam_samtools(bwa_map_res_path, num_threads, out_file)
             indexed_bam_samtools = index_bam_samtools(bam_file_sorted, num_threads)
             out_file = os.path.join(tmp_dir, 'mpileup_bcftools.vcf')
             mpileup_file = mpileup_bam_bcftools(ref_genome, bam_file_sorted, num_threads, out_file)
@@ -452,7 +461,7 @@ def main():
     snp_dt_raw = results_container['target_snp']
     strain_amount = len(snp_dt_raw)
     snp_dt_transed = transform_snp_dt(snp_dt_raw)
-    snp_filtered, ok_position = filter_snp_dt(snp_dt_transed, snp_coverage_cutoff, \
+    snp_filtered, ok_position = filter_snp_dt(snp_dt_transed, snp_coverage_cutoff,
         snp_qual_cutoff, snp_diversity_cutoff, strain_amount)
     print_res(snp_filtered, ok_position, results_container['ref_genome'], snp_all_dir)
 
