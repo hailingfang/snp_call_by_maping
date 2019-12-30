@@ -1,5 +1,5 @@
 # snp_call_by_maping
-maping reads to reference and call snp
+maping reads to reference and call snp  
 Note that snp position/site caused by snv site homologous recombination not removed.
 
 ## Important arguments  
